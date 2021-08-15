@@ -48,7 +48,7 @@ class RegReadIO extends Bundle {
 
 
 class RenameIO extends Bundle {
-  val rename_info = Flipped(Valid(Vec(ISSUE_WIDTH, new RenameInfo)))
+  val rename_info = Flipped(Valid(Vec(ISSUE_WIDTH, new DecodeInfo)))
   val rob_commit  = Vec(COMMIT_WIDTH, Flipped(Valid(new RobCommitInfo)))
   val reg_read = Vec(ISSUE_WIDTH, new RegReadIO())
   val rob_init_info = Valid(Vec(ISSUE_WIDTH, new RobInitInfo))

@@ -72,7 +72,7 @@ class Decoder extends Bundle {
   }
 }
 
-class RenameInfo extends Bundle {
+class DecodeInfo extends Bundle {
   val is_valid = Bool()
   val op1_addr = UInt(5.W)
   val op2_addr = UInt(5.W)
@@ -94,7 +94,7 @@ class DecodeIO extends Bundle {
   val fb_inst_bank = Flipped(Valid(new FBInstBank))
   val fb_resp = Output(new FBRespInfo())
   val rob_allocate = Flipped(new RobAllocateIO)
-  val rename_info  = Valid(Vec(ISSUE_WIDTH, new RenameInfo))
+  val rename_info  = Valid(Vec(ISSUE_WIDTH, new DecodeInfo))
   val need_flush    = Input(Bool())
 }
 
@@ -106,7 +106,7 @@ class Decode extends Module {
   rename_info.zip(io.fb_inst_bank.bits.data).foreach(i => i._1.decode(i._2.inst))
 
   //pipe stage
-  val rename_info_bits = Wire(Vec(ISSUE_WIDTH, new RenameInfo))
+  val rename_info_bits = Wire(Vec(ISSUE_WIDTH, new DecodeInfo))
   val rename_info_valid = WireInit(false.B)
 
   io.rob_allocate.allocate_req.bits:= VecInit(io.fb_inst_bank.bits.data.map(_.is_valid))
