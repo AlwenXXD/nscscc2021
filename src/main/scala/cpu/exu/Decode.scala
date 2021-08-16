@@ -73,17 +73,29 @@ class Decoder extends Bundle {
 }
 
 class DecodeInfo extends Bundle {
-  val is_valid = Bool()
-  val op1_addr = UInt(5.W)
-  val op2_addr = UInt(5.W)
-  val des_addr = UInt(5.W)
-  val des_rob  = UInt(ROB_IDX_WIDTH.W)
+  val is_valid      = Bool()
+  val inst_addr = UInt(32.W)
+  val op1_addr      = UInt(5.W)
+  val op2_addr      = UInt(5.W)
+  val des_addr      = UInt(5.W)
+  val des_rob       = UInt(ROB_IDX_WIDTH.W)
+  val predict_taken = Bool()
+  val imm_data      = UInt(32.W)
+  val uop           = uOP()
+  val unit_sel      = UnitSel()
+  val need_imm      = Bool()
   def init(): Unit ={
     is_valid := false.B
+    inst_addr:= 0.U(32.W)
     op1_addr := 0.U(5.W)
     op2_addr := 0.U(5.W)
     des_addr := 0.U(5.W)
     des_rob  := 0.U(ROB_IDX_WIDTH.W)
+    predict_taken := false.B
+    imm_data      := 0.U(32.W)
+    uop           := uOP.NOP
+    unit_sel      := UnitSel.is_Null
+    need_imm      := false.B
   }
 }
 class FBRespInfo extends Bundle{
@@ -94,20 +106,20 @@ class DecodeIO extends Bundle {
   val fb_inst_bank = Flipped(Valid(new FBInstBank))
   val fb_resp = Output(new FBRespInfo())
   val rob_allocate = Flipped(new RobAllocateIO)
-  val rename_info  = Valid(Vec(ISSUE_WIDTH, new DecodeInfo))
-  val need_flush    = Input(Bool())
+  val decode_info  = Valid(Vec(ISSUE_WIDTH, new DecodeInfo))
+  val need_flush   = Input(Bool())
 }
 
 
 class Decode extends Module {
   val io = IO(new DecodeIO)
 
-  val rename_info = Wire(Vec(ISSUE_WIDTH, new Decoder))
-  rename_info.zip(io.fb_inst_bank.bits.data).foreach(i => i._1.decode(i._2.inst))
+  val decode_info = Wire(Vec(ISSUE_WIDTH, new Decoder))
+  decode_info.zip(io.fb_inst_bank.bits.data).foreach(i => i._1.decode(i._2.inst))
 
   //pipe stage
-  val rename_info_bits = Wire(Vec(ISSUE_WIDTH, new DecodeInfo))
-  val rename_info_valid = WireInit(false.B)
+  val decode_info_bits  = Reg(Vec(ISSUE_WIDTH, new DecodeInfo))
+  val decode_info_valid = RegInit(false.B)
 
   io.rob_allocate.allocate_req.bits:= VecInit(io.fb_inst_bank.bits.data.map(_.is_valid))
   io.rob_allocate.allocate_req.valid:=io.fb_inst_bank.valid
@@ -123,42 +135,43 @@ class Decode extends Module {
     rob_allocate_info_bits(i).rob_idx := io.rob_allocate.allocate_resp.bits.rob_idx(i)
     rob_allocate_info_bits(i).inst_valid := io.rob_allocate.allocate_resp.bits.enq_valid_mask(i)
     rob_allocate_info_bits(i).inst_addr := io.fb_inst_bank.bits.data(i).inst_addr
-    rob_allocate_info_bits(i).commit_addr := rename_info(i).des_addr
-    rob_allocate_info_bits(i).commit_target := rename_info(i).target_sel
-    rob_allocate_info_bits(i).except_type := rename_info(i).except_type
+    rob_allocate_info_bits(i).commit_addr := decode_info(i).des_addr
+    rob_allocate_info_bits(i).commit_target := decode_info(i).target_sel
+    rob_allocate_info_bits(i).except_type := decode_info(i).except_type
     rob_allocate_info_bits(i).is_branch := io.fb_inst_bank.bits.data(i).is_branch
     rob_allocate_info_bits(i).is_delay := io.fb_inst_bank.bits.data(i).is_delay
-    rob_allocate_info_bits(i).predict_taken := io.fb_inst_bank.bits.data(i).predict_taken
+    rob_allocate_info_bits(i).flush_on_commit := decode_info(i).flush_on_commit
     rob_allocate_info_bits(i).gh_info := io.fb_inst_bank.bits.data(i).gh_backup
-    rob_allocate_info_bits(i).imm_data := rename_info(i).imm_data
-    rob_allocate_info_bits(i).flush_on_commit := rename_info(i).flush_on_commit
-    rob_allocate_info_bits(i).uop := rename_info(i).uop
-    rob_allocate_info_bits(i).unit_sel := rename_info(i).unit_sel
-    rob_allocate_info_bits(i).need_imm := rename_info(i).need_imm
 
 
-    rename_info_bits(i).is_valid := io.rob_allocate.allocate_resp.bits.enq_valid_mask(i)
-    rename_info_bits(i).op1_addr := rename_info(i).op1_addr
-    rename_info_bits(i).op2_addr := rename_info(i).op2_addr
-    rename_info_bits(i).des_addr := rename_info(i).des_addr
-    rename_info_bits(i).des_rob  := io.rob_allocate.allocate_resp.bits.rob_idx(i)
+    decode_info_bits(i).inst_addr := io.fb_inst_bank.bits.data(i).inst_addr
+    decode_info_bits(i).predict_taken := io.fb_inst_bank.bits.data(i).predict_taken
+    decode_info_bits(i).imm_data      := decode_info(i).imm_data
+    decode_info_bits(i).uop           := decode_info(i).uop
+    decode_info_bits(i).unit_sel      := decode_info(i).unit_sel
+    decode_info_bits(i).need_imm      := decode_info(i).need_imm
+    decode_info_bits(i).is_valid := io.rob_allocate.allocate_resp.bits.enq_valid_mask(i)
+    decode_info_bits(i).op1_addr := decode_info(i).op1_addr
+    decode_info_bits(i).op2_addr := decode_info(i).op2_addr
+    decode_info_bits(i).des_addr := decode_info(i).des_addr
+    decode_info_bits(i).des_rob  := io.rob_allocate.allocate_resp.bits.rob_idx(i)
   }
-  rename_info_valid := io.fb_inst_bank.valid && io.rob_allocate.allocate_resp.valid
+  decode_info_valid := io.fb_inst_bank.valid && io.rob_allocate.allocate_resp.valid
 
-  io.rename_info.bits:=rename_info_bits
-  io.rename_info.valid:=rename_info_valid
+  io.decode_info.bits:=decode_info_bits
+  io.decode_info.valid:=decode_info_valid
 
   io.fb_resp.deq_valid:=io.rob_allocate.allocate_resp.bits.enq_valid_mask
 
   when(io.need_flush){
-    rename_info_bits.foreach(_.init())
-    rename_info_valid:=false.B
+    decode_info_bits.foreach(_.init())
+    decode_info_valid:=false.B
     rob_allocate_info_bits.foreach(_.init())
     rob_allocate_info_valid:=false.B
   }
 
   when(reset.asBool()){
-    rename_info_bits.foreach(_.init())
+    decode_info_bits.foreach(_.init())
     rob_allocate_info_bits.foreach(_.init())
   }
 
