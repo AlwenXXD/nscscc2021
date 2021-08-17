@@ -6,7 +6,7 @@ import chisel3.experimental._
 import cpu.exu.{DispatchInfo, RobCommitInfo, WriteBackInfo}
 import cpu.ifu.FBInstBank
 import instructions.MIPS32._
-import signal.Const.{COMMIT_WIDTH, ROB_IDX_WIDTH, WRITE_BUFFER_DEPTH}
+import signal.Const._
 import signal._
 import signal.uOP
 
@@ -101,20 +101,31 @@ class Lsu extends Module {
   val st_enq           = WireInit(false.B)
   val st_deq = WireInit(false.B)
 
-  val load_queue = Reg(Vec(WRITE_BUFFER_DEPTH, new LoadQueueInfo))
-  val ld_complete_head = RegInit(1.U(WRITE_BUFFER_DEPTH.W))
-  val ld_waiting_head = RegInit(1.U(WRITE_BUFFER_DEPTH.W))
-  val ld_head = RegInit(1.U(WRITE_BUFFER_DEPTH.W))
-  val ld_tail          = RegInit(1.U(WRITE_BUFFER_DEPTH.W))
+  val load_queue = Reg(Vec(LOAD_QUEUE_DEPTH, new LoadQueueInfo))
+  val ld_complete_head = RegInit(1.U(LOAD_QUEUE_DEPTH.W))
+  val ld_waiting_head = RegInit(1.U(LOAD_QUEUE_DEPTH.W))
+  val ld_head = RegInit(1.U(LOAD_QUEUE_DEPTH.W))
+  val ld_tail          = RegInit(1.U(LOAD_QUEUE_DEPTH.W))
   val ld_maybe_full    = RegInit(false.B)
   val ld_full = ld_head === ld_tail && ld_maybe_full
   val ld_empty         = st_complete_head === st_tail && !st_maybe_full
   val ld_enq           = WireInit(false.B)
   val ld_deq =           WireInit(false.B)
 
+  def gen_write_data(data:UInt,uop:uOP.Type):UInt={
+    val byte_data = Fill(4, data(7,0))
+    val half_data = Fill(2, data(15,0))
+
+    val final_data = MuxLookup(uop.asUInt(), data,
+      Seq(
+        uOP.Mm_SB.asUInt() -> byte_data,
+        uOP.Mm_SH.asUInt() -> half_data,
+      ))
+    final_data
+  }
 
   val mem_addr = (dispatch_info.imm_data.asSInt() + dispatch_info.op1_data.asSInt()).asUInt()
-  val write_data            = dispatch_info.op2_data
+  val write_data            = gen_write_data(dispatch_info.op2_data,dispatch_info.uop)
   val is_ld                 = MuxLookup(dispatch_info.uop.asUInt(), false.B,
     Seq(
       uOP.Mm_LB.asUInt() -> true.B,
@@ -134,16 +145,15 @@ class Lsu extends Module {
       uOP.Mm_LBU.asUInt() -> true.B,
       uOP.Mm_LHU.asUInt() -> true.B,
     ))
-  val byte_mask             = MuxLookup(dispatch_info.uop.asUInt(), 0.U(4.W),
+  val byte_mask             = MuxCase(0.U(4.W),
     Seq(
-      uOP.Mm_LB.asUInt() -> "b0001".U(4.W),
-      uOP.Mm_LBU.asUInt() -> "b0001".U(4.W),
-      uOP.Mm_LH.asUInt() -> "b0011".U(4.W),
-      uOP.Mm_LHU.asUInt() -> "b0011".U(4.W),
-      uOP.Mm_LW.asUInt() -> "b1111".U(4.W),
-      uOP.Mm_SB.asUInt() -> "b0001".U(4.W),
-      uOP.Mm_SH.asUInt() -> "b0011".U(4.W),
-      uOP.Mm_SW.asUInt() -> "b1111".U(4.W)
+      (dispatch_info.uop===uOP.Mm_SB && mem_addr(1,0)==="b00".U(2.W)) -> "b0001".U(4.W),
+      (dispatch_info.uop===uOP.Mm_SB && mem_addr(1,0)==="b01".U(2.W)) -> "b0010".U(4.W),
+      (dispatch_info.uop===uOP.Mm_SB && mem_addr(1,0)==="b10".U(2.W)) -> "b0100".U(4.W),
+      (dispatch_info.uop===uOP.Mm_SB && mem_addr(1,0)==="b11".U(2.W)) -> "b1000".U(4.W),
+      (dispatch_info.uop===uOP.Mm_SH && mem_addr(1)==="b0".U(1.W)) -> "b0011".U(4.W),
+      (dispatch_info.uop===uOP.Mm_SH && mem_addr(1)==="b1".U(1.W)) -> "b1100".U(4.W),
+      (dispatch_info.uop===uOP.Mm_SW)  -> "b1111".U(4.W),
     ))
   val is_uncache            = mem_addr(31, 4) === "hBFD003F".U(28.W)
   io.wb_info.bits := DontCare
@@ -379,10 +389,10 @@ class Lsu extends Module {
     load_queue.foreach(i=>i.init())
 
     ld_maybe_full:=false.B
-    ld_head:=1.U(WRITE_BUFFER_DEPTH.W)
-    ld_waiting_head:=1.U(WRITE_BUFFER_DEPTH.W)
-    ld_complete_head:=1.U(WRITE_BUFFER_DEPTH.W)
-    ld_tail:=1.U(WRITE_BUFFER_DEPTH.W)
+    ld_head:=1.U(LOAD_QUEUE_DEPTH.W)
+    ld_waiting_head:=1.U(LOAD_QUEUE_DEPTH.W)
+    ld_complete_head:=1.U(LOAD_QUEUE_DEPTH.W)
+    ld_tail:=1.U(LOAD_QUEUE_DEPTH.W)
   }
 
   when(reset.asBool()){

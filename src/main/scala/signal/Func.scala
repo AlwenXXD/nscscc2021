@@ -52,6 +52,8 @@ object uOP extends ChiselEnum {
   Mm_LHU,
   Mm_LB,
   Mm_LBU,
+  //hpu
+  Hpu_0,
   //cp0
   Cp0_MT,
   Cp0_MF,
@@ -68,6 +70,7 @@ object UnitSel extends ChiselEnum {
   is_Cp0,
   is_Mem,
   is_Mdu,
+  is_Hpu,
   is_Bju = Value
 }
 

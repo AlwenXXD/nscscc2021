@@ -80,8 +80,8 @@ class Rename extends Module {
     map_table(i) := io.decode_info.bits.zipWithIndex.foldLeft(map_table(i)){case (p,(info,k)) => Mux(io.decode_info.valid&&info.is_valid && remap_idx(k)(i), info.des_rob, p)}
   }
 
-  val rename_info = Wire(Vec(ISSUE_WIDTH, new RenameInfo))
-  val rename_info_valid = WireInit(false.B)
+  val rename_info = Reg(Vec(ISSUE_WIDTH, new RenameInfo))
+  val rename_info_valid = RegInit(false.B)
   io.rename_info.bits := rename_info
   io.rename_info.valid := rename_info_valid
 
@@ -113,6 +113,13 @@ class Rename extends Module {
     rename_info(i).predict_taken:=io.decode_info.bits(i).predict_taken
   }
   rename_info_valid:=io.decode_info.valid
+
+  when(io.need_stop){
+    busy_table := busy_table
+    map_table := map_table
+    rename_info := rename_info
+    rename_info_valid := rename_info_valid
+  }
 
   when(io.need_flush){
     rename_info.foreach(_.init())

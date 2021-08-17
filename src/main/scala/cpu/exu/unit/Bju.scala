@@ -18,9 +18,9 @@ class BjuIO extends Bundle{
 class Bju extends Module{
   val io = IO(new BjuIO)
 
-  val dispatch_info         = Reg(new DispatchInfo)
+  val dispatch_info         = Wire(new DispatchInfo)
   dispatch_info :=io.dispatch_info.bits
-  val dispatch_valid        = RegInit(false.B)
+  val dispatch_valid        = WireInit(false.B)
   dispatch_valid:=io.dispatch_info.valid
   io.dispatch_info.ready:=true.B
 

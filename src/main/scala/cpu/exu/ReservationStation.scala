@@ -44,7 +44,7 @@ class RSInfo extends Bundle{
 class RSIO extends Bundle{
   val issue_info    = Flipped(Decoupled(Vec(ISSUE_WIDTH, new RSInfo)))
   val dispatch_info = Decoupled(new DispatchInfo)
-  val wb_info    = Vec(7, Flipped(Valid(new WriteBackInfo)))
+  val wb_info    = Vec(5, Flipped(Valid(new WriteBackInfo)))
   val need_flush = Input(Bool())
   val need_stop = Input(Bool())
 }
@@ -112,7 +112,7 @@ class ReservationStation(entry:Int) extends Module{
   }
 
   for (i <- 0 until entry){
-    for ( j<- 0 until 7){
+    for ( j<- 0 until 5){
       when(queue(i).is_valid && !queue(i).op1_ready && io.wb_info(j).valid && queue(i).op1_tag === io.wb_info(j).bits.rob_idx&& !io.need_flush){
         queue(i).op1_ready := true.B
         queue(i).op1_data := io.wb_info(j).bits.data

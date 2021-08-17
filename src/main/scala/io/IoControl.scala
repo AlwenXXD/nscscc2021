@@ -159,7 +159,8 @@ class IoControl extends Module {
   io.icache_read_resp.bits.data := icache_buffer.asUInt()
   val dcache_buffer     = RegInit(0.U(32.W))
   val dcache_data_valid = RegInit(false.B)
-  io.dcache_read_req.ready := dcache_data_valid
+  val dcache_read_ready = WireInit(false.B)
+  io.dcache_read_req.ready := dcache_read_ready
   io.dcache_read_resp.valid := dcache_data_valid
   io.dcache_read_resp.bits.data := dcache_buffer.asUInt()
   val dcache_write_complete = WireInit(false.B)
@@ -178,6 +179,7 @@ class IoControl extends Module {
       when(dcache_read_other){
         dcache_buffer:=0.U(32.W)
         dcache_data_valid:=true.B
+        dcache_read_ready :=true.B
         other_state:=odWAIT
       }
       when(dcache_write_other){
@@ -263,6 +265,7 @@ class IoControl extends Module {
         base_ram_ctrl.idle()
         dcache_buffer := EndianConvert(io.base_ram_ctrl.data_in)
         dcache_data_valid := true.B
+        dcache_read_ready :=true.B
       }.otherwise{
         base_wait_counter:= base_wait_counter+1.U
       }
@@ -349,6 +352,7 @@ class IoControl extends Module {
         ext_ram_ctrl.idle()
         dcache_buffer := EndianConvert(io.ext_ram_ctrl.data_in)
         dcache_data_valid := true.B
+        dcache_read_ready :=true.B
       }.otherwise{
         ext_wait_counter:= ext_wait_counter+1.U
       }
@@ -475,12 +479,14 @@ class IoControl extends Module {
       }.elsewhen(dcache_read_uart&& read_valid){
         dcache_buffer:=Cat(0.U(24.W),read_data)
         dcache_data_valid:=true.B
+        dcache_read_ready :=true.B
         read_req:=true.B
         read_rob_idx:=io.dcache_read_req.bits.rob_idx
         uart_state:=uREAD
       }.elsewhen(dcache_read_uart_state){
         dcache_buffer:=Cat(0.U(30.W),read_valid,!io.txd.uart_busy)
         dcache_data_valid:=true.B
+        dcache_read_ready :=true.B
         uart_state:=uREAD
       }
     }

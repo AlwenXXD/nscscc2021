@@ -108,6 +108,7 @@ class DecodeIO extends Bundle {
   val rob_allocate = Flipped(new RobAllocateIO)
   val decode_info  = Valid(Vec(ISSUE_WIDTH, new DecodeInfo))
   val need_flush   = Input(Bool())
+  val need_stop   = Input(Bool())
 }
 
 
@@ -162,6 +163,13 @@ class Decode extends Module {
   io.decode_info.valid:=decode_info_valid
 
   io.fb_resp.deq_valid:=io.rob_allocate.allocate_resp.bits.enq_valid_mask
+
+  when(io.need_stop){
+    decode_info_bits := decode_info_bits
+    decode_info_valid:= decode_info_valid
+    rob_allocate_info_bits:=rob_allocate_info_bits
+    rob_allocate_info_valid:=rob_allocate_info_valid
+  }
 
   when(io.need_flush){
     decode_info_bits.foreach(_.init())

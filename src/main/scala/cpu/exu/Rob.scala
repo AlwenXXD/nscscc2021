@@ -125,10 +125,12 @@ class DispatchInfo extends Bundle {
 class RobIO extends Bundle {
   val rob_allocate    = new RobAllocateIO
   val rob_read        = Vec(ISSUE_WIDTH, Flipped(new RobReadIO()))
-  val wb_info_i       = Vec(7, Flipped(Valid(new WriteBackInfo)))
+  val wb_info_i       = Vec(5, Flipped(Valid(new WriteBackInfo)))
   val rob_commit      = Vec(COMMIT_WIDTH, Valid(new RobCommitInfo))
   val branch_info     = Valid(new BranchInfo)
   val need_flush      = Output(Bool())
+  val need_stop      = Input(Bool())
+
 }
 
 class Rob extends Module {
@@ -165,7 +167,7 @@ class Rob extends Module {
     might_hit_head_mask(i):= might_hit
     next_tail = Mux(inst_valid_mask(i)&&(!might_hit), leftRotate(next_tail, 1), next_tail)
   }
-  val enq_valid_mask = might_hit_head_mask.zip(inst_valid_mask).map(i=>(!i._1)&i._2)
+  val enq_valid_mask = might_hit_head_mask.zip(inst_valid_mask).map(i=>(!i._1)&i._2& !io.need_stop)
   val has_valid = enq_valid_mask.reduce(_ | _)
   val do_enq    =  has_valid
 
@@ -180,7 +182,7 @@ class Rob extends Module {
   //enq logic
   for (j <- 0 until ISSUE_WIDTH) {
     val rob_idx = io.rob_allocate.allocate_info.bits(j).rob_idx
-    when(io.rob_allocate.allocate_info.valid&&io.rob_allocate.allocate_info.bits(j).inst_valid && !need_flush) {
+    when(io.rob_allocate.allocate_info.valid&&io.rob_allocate.allocate_info.bits(j).inst_valid && !need_flush && !io.need_stop) {
       rob_info(rob_idx).commit_ready := false.B
       rob_info(rob_idx).busy := false.B
       rob_info(rob_idx).is_valid := true.B
@@ -197,17 +199,9 @@ class Rob extends Module {
     }
   }
 
-  for (i <- 0 until ISSUE_WIDTH){
-    val op1_idx = io.rob_read(i).op1_idx
-    val op2_idx = io.rob_read(i).op2_idx
-    io.rob_read(i).op1_data:=rob_info(op1_idx).commit_data
-    io.rob_read(i).op1_ready:=rob_info(op1_idx).commit_ready
-    io.rob_read(i).op2_data:=rob_info(op2_idx).commit_data
-    io.rob_read(i).op2_ready:=rob_info(op2_idx).commit_ready
-  }
 
   //write-back logic
-  for (j <- 0 until 7) {
+  for (j <- 0 until 5) {
     val des_rob = io.wb_info_i(j).bits.rob_idx
     when(io.wb_info_i(j).valid&&rob_info(des_rob).is_valid&& !need_flush) {
       rob_info(des_rob).commit_data := io.wb_info_i(j).bits.data
@@ -235,7 +229,7 @@ class Rob extends Module {
   val do_deq          = deq_ready_mask(0)
 
   //commit logic
-  val rob_commit = Reg(Vec(COMMIT_WIDTH,new RobCommitInfo))
+  val rob_commit       = Reg(Vec(COMMIT_WIDTH, new RobCommitInfo))
   val rob_commit_valid = RegInit(VecInit(Seq.fill(COMMIT_WIDTH)(false.B)))
   for (j <- 0 until COMMIT_WIDTH) {
     val rob_idx = deq_robs(j)
@@ -243,7 +237,7 @@ class Rob extends Module {
     rob_commit(j).commit_data := rob_info(rob_idx).commit_data
     rob_commit(j).des_rob := rob_idx
     rob_commit(j).commit_addr := rob_info(rob_idx).commit_addr
-    when(deq_ready_mask(j)){
+    when(deq_ready_mask(j)&& !io.need_stop){
       rob_info(rob_idx).InitRob()
     }
     io.rob_commit(j).bits:=rob_commit(j)
@@ -254,7 +248,7 @@ class Rob extends Module {
 
 
 
-  val branch_info = Reg(new BranchInfo)
+  val branch_info       = Reg(new BranchInfo)
   val branch_info_valid = RegInit(false.B)
   branch_info_valid := false.B
   branch_info.target_addr := rob_info(flush_rob).imm_data
@@ -266,6 +260,26 @@ class Rob extends Module {
 
   io.branch_info.bits:=branch_info
   io.branch_info.valid:=branch_info_valid
+
+  val op1_in_commit = Wire(Vec(ISSUE_WIDTH,Bool()))
+  val op2_in_commit = Wire(Vec(ISSUE_WIDTH,Bool()))
+  val op1_commitData = Wire(Vec(ISSUE_WIDTH,UInt(32.W)))
+  val op2_commitData = Wire(Vec(ISSUE_WIDTH,UInt(32.W)))
+  for (i<-0 until ISSUE_WIDTH){
+    op1_in_commit(i):= rob_commit.zip(rob_commit_valid).map{case (commit,valid)=> commit.des_rob === io.rob_read(i).op1_idx && valid}.reduce(_|_)
+    op2_in_commit(i):= rob_commit.zip(rob_commit_valid).map{case (commit,valid)=> commit.des_rob === io.rob_read(i).op2_idx && valid}.reduce(_|_)
+    op1_commitData(i) := rob_commit.zip(rob_commit_valid).map{case (commit,valid)=> Fill(32,commit.des_rob === io.rob_read(i).op1_idx && valid) & commit.commit_data}.reduce(_|_)
+    op2_commitData(i) := rob_commit.zip(rob_commit_valid).map{case (commit,valid)=> Fill(32,commit.des_rob === io.rob_read(i).op2_idx && valid) & commit.commit_data}.reduce(_|_)
+  }
+  for (i <- 0 until ISSUE_WIDTH){
+    val op1_idx = io.rob_read(i).op1_idx
+    val op2_idx = io.rob_read(i).op2_idx
+    io.rob_read(i).op1_data:= Mux(op1_in_commit(i),op1_commitData(i),rob_info(op1_idx).commit_data)
+    io.rob_read(i).op1_ready:=rob_info(op1_idx).commit_ready || op1_in_commit(i)
+    io.rob_read(i).op2_data:= Mux(op2_in_commit(i),op2_commitData(i),rob_info(op2_idx).commit_data)
+    io.rob_read(i).op2_ready:=rob_info(op2_idx).commit_ready || op2_in_commit(i)
+  }
+
 
 
   head := head_next
@@ -313,6 +327,18 @@ class Rob extends Module {
   }
 
   io.need_flush:=need_flush
+
+  when(io.need_stop){
+    head:=head
+    tail:=tail
+    maybe_full:=maybe_full
+    waiting_delay:=waiting_delay
+    need_flush :=need_flush
+    rob_commit:= rob_commit
+    rob_commit_valid:= rob_commit_valid
+    branch_info:=branch_info
+    branch_info_valid:=branch_info_valid
+  }
 
   when(need_flush){
     for (i <- 0 until ROB_DEPTH) {
