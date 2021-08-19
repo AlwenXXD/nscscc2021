@@ -102,20 +102,20 @@ class Issuer(rs_num: Int, unit_type: UnitSel.Type) extends Module{
 class IssueIO extends Bundle{
   val rename_info = Flipped(Valid(Vec(ISSUE_WIDTH, new RenameInfo)))
   val rob_read = Vec(ISSUE_WIDTH, new RobReadIO())
-  val wb_info    = Vec(5, Flipped(Valid(new WriteBackInfo)))
-  val dispatch_info = Vec(5,Decoupled(new DispatchInfo))
+  val wb_info    = Vec(DISPATCH_WIDTH, Flipped(Valid(new WriteBackInfo)))
+  val dispatch_info = Vec(DISPATCH_WIDTH,Decoupled(new DispatchInfo))
   val need_flush = Input(Bool())
   val need_stop= Output(Bool())
 }
 
 class Issue extends Module{
   val io               = IO(new IssueIO)
-  val alu_issuer       = Module(new Issuer(2, UnitSel.is_Alu))
+  val alu_issuer       = Module(new Issuer(4, UnitSel.is_Alu))
   val bju_issuer       = Module(new Issuer(1, UnitSel.is_Bju))
   val mdu_issuer       = Module(new Issuer(1, UnitSel.is_Mdu))
   val lsu_issuer       = Module(new Issuer(1, UnitSel.is_Mem))
   val issuers          = alu_issuer :: bju_issuer :: mdu_issuer :: lsu_issuer :: Nil
-  val alu_rs           = Seq.fill(2)(Module(new ReservationStation(4)))
+  val alu_rs           = Seq.fill(4)(Module(new ReservationStation(4)))
   val bju_rs           = Seq.fill(1)(Module(new ReservationStation(4)))
   val mdu_rs           = Seq.fill(1)(Module(new ReservationStation(4)))
   val lsu_rs           = Seq.fill(1)(Module(new ReservationStation(8)))
@@ -168,9 +168,11 @@ class Issue extends Module{
 
   io.dispatch_info(0)<>alu_rs(0).io.dispatch_info
   io.dispatch_info(1)<>alu_rs(1).io.dispatch_info
-  io.dispatch_info(2)<>bju_rs(0).io.dispatch_info
-  io.dispatch_info(3)<>mdu_rs(0).io.dispatch_info
-  io.dispatch_info(4)<>lsu_rs(0).io.dispatch_info
+  io.dispatch_info(2)<>alu_rs(2).io.dispatch_info
+  io.dispatch_info(3)<>alu_rs(3).io.dispatch_info
+  io.dispatch_info(4)<>bju_rs(0).io.dispatch_info
+  io.dispatch_info(5)<>mdu_rs(0).io.dispatch_info
+  io.dispatch_info(6)<>lsu_rs(0).io.dispatch_info
 
   io.need_stop := !all_ready
 

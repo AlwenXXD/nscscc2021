@@ -125,7 +125,7 @@ class DispatchInfo extends Bundle {
 class RobIO extends Bundle {
   val rob_allocate    = new RobAllocateIO
   val rob_read        = Vec(ISSUE_WIDTH, Flipped(new RobReadIO()))
-  val wb_info_i       = Vec(5, Flipped(Valid(new WriteBackInfo)))
+  val wb_info_i       = Vec(DISPATCH_WIDTH, Flipped(Valid(new WriteBackInfo)))
   val rob_commit      = Vec(COMMIT_WIDTH, Valid(new RobCommitInfo))
   val branch_info     = Valid(new BranchInfo)
   val need_flush      = Output(Bool())
@@ -201,7 +201,7 @@ class Rob extends Module {
 
 
   //write-back logic
-  for (j <- 0 until 5) {
+  for (j <- 0 until DISPATCH_WIDTH) {
     val des_rob = io.wb_info_i(j).bits.rob_idx
     when(io.wb_info_i(j).valid&&rob_info(des_rob).is_valid&& !need_flush) {
       rob_info(des_rob).commit_data := io.wb_info_i(j).bits.data

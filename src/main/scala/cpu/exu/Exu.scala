@@ -3,7 +3,7 @@ package cpu.exu
 import chisel3._
 import chisel3.util._
 import chisel3.experimental._
-import cpu.exu.unit.{Alu, Bju, DCacheReadReq, DCacheResp, DCacheWriteReq, Lsu, Mdu}
+import cpu.exu.unit.{Alu, Bju, DCacheReadReq, DCacheResp, DCacheWriteReq, Hpu, Lsu, Mdu}
 import cpu.ifu.{BranchInfo, FBInstBank}
 import instructions.MIPS32._
 import signal.Const.COMMIT_WIDTH
@@ -28,6 +28,8 @@ class Exu extends Module{
   val issue = Module(new Issue)
   val alu0 = Module(new Alu)
   val alu1 = Module(new Alu)
+  val alu2 = Module(new Alu)
+  val alu3 = Module(new Alu)
   val bju0 = Module(new Bju)
   val lsu = Module(new Lsu)
   val mdu = Module(new Mdu)
@@ -61,6 +63,8 @@ class Exu extends Module{
   rob.io.need_flush<>issue.io.need_flush
   rob.io.need_flush<>alu0.io.need_flush
   rob.io.need_flush<>alu1.io.need_flush
+  rob.io.need_flush<>alu2.io.need_flush
+  rob.io.need_flush<>alu3.io.need_flush
   rob.io.need_flush<>bju0.io.need_flush
   rob.io.need_flush<>lsu.io.need_flush
   rob.io.need_flush<>mdu.io.need_flush
@@ -68,21 +72,27 @@ class Exu extends Module{
 
   rob.io.wb_info_i(0)<>alu0.io.wb_info
   rob.io.wb_info_i(1)<>alu1.io.wb_info
-  rob.io.wb_info_i(2)<>bju0.io.wb_info
-  rob.io.wb_info_i(3)<>mdu.io.wb_info
-  rob.io.wb_info_i(4)<>lsu.io.wb_info
+  rob.io.wb_info_i(2)<>alu2.io.wb_info
+  rob.io.wb_info_i(3)<>alu3.io.wb_info
+  rob.io.wb_info_i(4)<>bju0.io.wb_info
+  rob.io.wb_info_i(5)<>mdu.io.wb_info
+  rob.io.wb_info_i(6)<>lsu.io.wb_info
 
   issue.io.wb_info(0)<>alu0.io.wb_info
   issue.io.wb_info(1)<>alu1.io.wb_info
-  issue.io.wb_info(2)<>bju0.io.wb_info
-  issue.io.wb_info(3)<>mdu.io.wb_info
-  issue.io.wb_info(4)<>lsu.io.wb_info
+  issue.io.wb_info(2)<>alu2.io.wb_info
+  issue.io.wb_info(3)<>alu3.io.wb_info
+  issue.io.wb_info(4)<>bju0.io.wb_info
+  issue.io.wb_info(5)<>mdu.io.wb_info
+  issue.io.wb_info(6)<>lsu.io.wb_info
 
   issue.io.dispatch_info(0)<>alu0.io.dispatch_info
   issue.io.dispatch_info(1)<>alu1.io.dispatch_info
-  issue.io.dispatch_info(2)<>bju0.io.dispatch_info
-  issue.io.dispatch_info(3)<>mdu.io.dispatch_info
-  issue.io.dispatch_info(4)<>lsu.io.dispatch_info
+  issue.io.dispatch_info(2)<>alu2.io.dispatch_info
+  issue.io.dispatch_info(3)<>alu3.io.dispatch_info
+  issue.io.dispatch_info(4)<>bju0.io.dispatch_info
+  issue.io.dispatch_info(5)<>mdu.io.dispatch_info
+  issue.io.dispatch_info(6)<>lsu.io.dispatch_info
 
   issue.io.need_stop<>decode.io.need_stop
   issue.io.need_stop<>rename.io.need_stop
