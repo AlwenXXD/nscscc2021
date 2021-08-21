@@ -14,7 +14,7 @@ class TopDebug extends Module{
   val top = Module(new Top)
   val base_ram = Mem(1024, UInt(32.W))
   val ext_ram = Mem(1024, UInt(32.W))
-  loadMemoryFromFile(base_ram, "C:\\Users\\Alwen\\Desktop\\mars\\test.txt")
+  loadMemoryFromFile(base_ram, "test.txt")
 
   io.base_ram_ctrl<>top.io.base_ram_ctrl
   io.ext_ram_ctrl<>top.io.ext_ram_ctrl
